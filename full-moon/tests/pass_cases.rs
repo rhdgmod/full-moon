@@ -118,3 +118,12 @@ fn test_cfxlua_pass_cases() {
         test_pass_case(path, LuaVersion::cfxlua())
     });
 }
+
+#[test]
+#[cfg(feature = "glua")]
+#[cfg_attr(feature = "no-source-tests", ignore)]
+fn test_glua_pass_cases() {
+    run_test_folder("./tests/glua_cases/pass", |path| {
+        test_pass_case(path, LuaVersion::glua())
+    });
+}

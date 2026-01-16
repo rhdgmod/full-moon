@@ -577,7 +577,7 @@ impl Lexer {
 
             '/' => {
                 version_switch!(self.lua_version, {
-                    lua53 | luau | cfxlua => {
+                    lua53 | luau | cfxlua | glua => {
                         if self.source.consume('/') {
                             version_switch!(self.lua_version, {
                                 luau => {
@@ -587,7 +587,28 @@ impl Lexer {
                                 }
                             });
 
-                            return self.create(start_position, TokenType::Symbol { symbol: Symbol::DoubleSlash} );
+                            version_switch!(self.lua_version, {
+                                glua => {
+                                    let (token, recovered) = self.read_c_style_single_line_comment();
+                                    return self.create_recovered(
+                                        start_position,
+                                        token,
+                                        if recovered {
+                                            vec![TokenizerError {
+                                                error: TokenizerErrorType::UnclosedComment,
+                                                range: (start_position, self.source.position()),
+                                            }]
+                                        } else {
+                                            Vec::new()
+                                        }
+                                    );
+                                }
+                            });
+                            version_switch!(self.lua_version, {
+                                lua53 | luau | cfxlua => {
+                                    return self.create(start_position, TokenType::Symbol { symbol: Symbol::DoubleSlash} );
+                                }
+                            });
                         }
 
                         version_switch!(self.lua_version, {
@@ -604,7 +625,7 @@ impl Lexer {
                         });
 
                         version_switch!(self.lua_version, {
-                             cfxlua => {
+                             cfxlua | glua => {
                                 if self.source.consume('*') {
                                     let (token, recovered) = self.read_c_style_comment();
 
@@ -936,6 +957,23 @@ impl Lexer {
                 },
             ),
 
+            // Ensure C style operators (glua) are checked first.
+            #[cfg(feature = "glua")]
+            '&' if self.lua_version.has_glua() && self.source.consume('&') => self.create(
+                start_position,
+                TokenType::Symbol {
+                    symbol: Symbol::DoubleAmpersand,
+                },
+            ),
+
+            #[cfg(feature = "glua")]
+            '|' if self.lua_version.has_glua() && self.source.consume('|') => self.create(
+                start_position,
+                TokenType::Symbol {
+                    symbol: Symbol::DoublePipe,
+                },
+            ),
+
             // Now fall back to the plain operators
             #[cfg(any(feature = "lua53", feature = "luau"))]
             '&' if self.lua_version.has_lua53() || self.lua_version.has_luau() => self.create(
@@ -968,6 +1006,25 @@ impl Lexer {
                     symbol: Symbol::AtSign,
                 },
             ),
+
+            #[cfg(feature = "glua")]
+            '!' if self.lua_version.has_glua() => {
+                if self.source.consume('=') {
+                    return self.create(
+                        start_position,
+                        TokenType::Symbol {
+                            symbol: Symbol::ExclamationEqual,
+                        },
+                    );
+                }
+
+                self.create(
+                    start_position,
+                    TokenType::Symbol {
+                        symbol: Symbol::Exclamation,
+                    },
+                )
+            }
 
             unknown_char => Some(LexerResult::Fatal(vec![TokenizerError {
                 error: TokenizerErrorType::UnexpectedToken(unknown_char),
@@ -1400,7 +1457,32 @@ impl Lexer {
         MultiLineBodyResult::Ok { blocks, body }
     }
 
-    #[cfg(feature = "cfxlua")]
+    #[cfg(feature = "glua")]
+    fn read_c_style_single_line_comment(&mut self) -> (TokenType, bool) {
+        let mut comment = String::new();
+
+        let mut position_before_new_line = self.source.lexer_position;
+
+        while let Some(next) = self.source.next() {
+            if next == '\n' {
+                break;
+            }
+
+            comment.push(next);
+            position_before_new_line = self.source.lexer_position;
+        }
+
+        self.source.lexer_position = position_before_new_line;
+
+        (
+            TokenType::CStyleSingleLineComment {
+                comment: comment.into(),
+            },
+            false,
+        )
+    }
+
+    #[cfg(any(feature = "cfxlua", feature = "glua"))]
     fn read_c_style_comment(&mut self) -> (TokenType, bool) {
         let mut comment = String::new();
 

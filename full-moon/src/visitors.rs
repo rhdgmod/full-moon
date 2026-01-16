@@ -330,7 +330,11 @@ create_visitor!(ast: {
         visit_interpolated_string_segment,
     }
 
-    #[cfg(feature = "cfxlua")] {
+    #[cfg(feature = "glua")] {
+        visit_c_style_single_line_comment,
+    }
+
+    #[cfg(any(feature = "cfxlua", feature = "glua"))] {
         visit_c_style_comment,
     }
 });

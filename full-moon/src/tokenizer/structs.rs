@@ -175,6 +175,11 @@ symbol! {
         Star => "*",
         [lua53] Tilde => "~",
         TildeEqual => "~=",
+
+        [glua] Exclamation => "!",
+        [glua] ExclamationEqual => "!=",
+        [glua] DoubleAmpersand => "&&",
+        [glua] DoublePipe => "||",
     }
 }
 
@@ -313,7 +318,14 @@ pub enum TokenType {
         kind: InterpolatedStringKind,
     },
 
-    #[cfg(feature = "cfxlua")]
+    #[cfg(feature = "glua")]
+    /// A single line C-style comment, such as `// comment`
+    CStyleSingleLineComment {
+        /// The comment, ignoring initial `//`
+        comment: ShortString,
+    },
+
+    #[cfg(any(feature = "cfxlua", feature = "glua"))]
     /// A single/multi line C-style comment, such as `/* comment */`
     CStyleComment {
         /// The comment, ignoring initial `--`
@@ -325,7 +337,7 @@ impl TokenType {
     /// Returns whether a token can be practically ignored in most cases
     /// Comments and whitespace will return `true`, everything else will return `false`
     pub fn is_trivia(&self) -> bool {
-        #[cfg(not(feature = "cfxlua"))]
+        #[cfg(all(not(feature = "cfxlua"), not(feature = "glua")))]
         return matches!(
             self,
             TokenType::Shebang { .. }
@@ -341,6 +353,17 @@ impl TokenType {
                 | TokenType::SingleLineComment { .. }
                 | TokenType::MultiLineComment { .. }
                 | TokenType::Whitespace { .. }
+                | TokenType::CStyleComment { .. }
+        );
+
+        #[cfg(feature = "glua")]
+        return matches!(
+            self,
+            TokenType::Shebang { .. }
+                | TokenType::SingleLineComment { .. }
+                | TokenType::MultiLineComment { .. }
+                | TokenType::Whitespace { .. }
+                | TokenType::CStyleSingleLineComment { .. }
                 | TokenType::CStyleComment { .. }
         );
     }
@@ -372,7 +395,10 @@ impl TokenType {
             #[cfg(feature = "luau")]
             TokenType::InterpolatedString { .. } => TokenKind::InterpolatedString,
 
-            #[cfg(feature = "cfxlua")]
+            #[cfg(feature = "glua")]
+            TokenType::CStyleSingleLineComment { .. } => TokenKind::CStyleSingleLineComment,
+
+            #[cfg(any(feature = "cfxlua", feature = "glua"))]
             TokenType::CStyleComment { .. } => TokenKind::CStyleComment,
         }
     }
@@ -419,7 +445,11 @@ pub enum TokenKind {
     /// Some form of interpolated string
     InterpolatedString,
 
-    #[cfg(feature = "cfxlua")]
+    #[cfg(feature = "glua")]
+    /// A single line C-style comment, such as `// comment`
+    CStyleSingleLineComment,
+
+    #[cfg(any(feature = "cfxlua", feature = "glua"))]
     /// A C-style comment, such as `/* comment */`
     CStyleComment,
 }
@@ -517,7 +547,10 @@ impl fmt::Display for Token {
                 }
             },
 
-            #[cfg(feature = "cfxlua")]
+            #[cfg(feature = "glua")]
+            CStyleSingleLineComment { comment } => write!(formatter, "//{comment}"),
+
+            #[cfg(any(feature = "cfxlua", feature = "glua"))]
             CStyleComment { comment } => write!(formatter, "/*{comment}*/"),
         }
     }
@@ -553,7 +586,10 @@ impl Visit for Token {
             #[cfg(feature = "luau")]
             TokenKind::InterpolatedString => visitor.visit_interpolated_string_segment(self),
 
-            #[cfg(feature = "cfxlua")]
+            #[cfg(feature = "glua")]
+            TokenKind::CStyleSingleLineComment => visitor.visit_c_style_single_line_comment(self),
+
+            #[cfg(any(feature = "cfxlua", feature = "glua"))]
             TokenKind::CStyleComment => visitor.visit_c_style_comment(self),
         }
     }
@@ -577,7 +613,10 @@ impl VisitMut for Token {
             #[cfg(feature = "luau")]
             TokenKind::InterpolatedString => visitor.visit_interpolated_string_segment(token),
 
-            #[cfg(feature = "cfxlua")]
+            #[cfg(feature = "glua")]
+            TokenKind::CStyleSingleLineComment => visitor.visit_c_style_single_line_comment(token),
+
+            #[cfg(any(feature = "cfxlua", feature = "glua"))]
             TokenKind::CStyleComment => visitor.visit_c_style_comment(token),
         }
     }

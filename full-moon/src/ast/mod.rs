@@ -124,8 +124,8 @@ pub enum LastStmt {
     /// A `break` statement
     Break(TokenReference),
     /// A continue statement
-    /// Only available when the "luau" feature flag is enabled.
-    #[cfg(feature = "luau")]
+    /// Only available when the "luau" or "glua" feature flag is enabled.
+    #[cfg(any(feature = "luau", feature = "glua"))]
     Continue(TokenReference),
     /// A `return` statement
     Return(Return),
@@ -2317,10 +2317,13 @@ make_bin_op!(
         LessThan = 3,
         LessThanEqual = 3,
         TildeEqual = 3,
+        [glua] ExclamationEqual = 3,
         TwoEqual = 3,
 
+        [glua] DoubleAmpersand = 2,
         And = 2,
 
+        [glua] DoublePipe = 1,
         Or = 1,
     }
 );
@@ -2363,6 +2366,8 @@ pub enum UnOp {
     Hash(TokenReference),
     #[cfg(feature = "lua53")]
     Tilde(TokenReference),
+    #[cfg(feature = "glua")]
+    Exclamation(TokenReference),
 }
 
 impl UnOp {
@@ -2372,6 +2377,8 @@ impl UnOp {
             UnOp::Minus(token) | UnOp::Not(token) | UnOp::Hash(token) => token,
             #[cfg(feature = "lua53")]
             UnOp::Tilde(token) => token,
+            #[cfg(feature = "glua")]
+            UnOp::Exclamation(token) => token,
         }
     }
 

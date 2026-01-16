@@ -436,6 +436,23 @@ fn parse_stmt(state: &mut ParserState) -> ParserResult<StmtVariant> {
                         }
                     }
 
+                    #[cfg(feature = "glua")]
+                    if state.lua_version().has_glua() {
+                        if let ast::Var::Name(token) = var {
+                            match token.token_type() {
+                                TokenType::Identifier { identifier }
+                                    if identifier.as_str() == "continue" =>
+                                {
+                                    let continue_token = token;
+                                    return ParserResult::Value(StmtVariant::LastStmt(
+                                        ast::LastStmt::Continue(continue_token),
+                                    ));
+                                }
+                                _ => (),
+                            }
+                        }
+                    }
+
                     state.token_error(
                         token.clone(),
                         "unexpected expression when looking for a statement",
@@ -1987,6 +2004,14 @@ fn parse_primary_expression(state: &mut ParserState) -> ParserResult<Expression>
             parse_unary_expression(state, unary_operator_token)
         }
 
+        #[cfg(feature = "glua")]
+        TokenType::Symbol {
+            symbol: Symbol::Exclamation,
+        } if state.lua_version().has_glua() => {
+            let unary_operator_token = state.consume().unwrap();
+            parse_unary_expression(state, unary_operator_token)
+        }
+
         TokenType::Symbol {
             symbol: Symbol::LeftBrace,
         } => {
@@ -2139,6 +2164,10 @@ fn parse_unary_expression(
             #[cfg(feature = "lua53")]
             Symbol::Tilde if state.lua_version().has_lua53() => {
                 ast::UnOp::Tilde(unary_operator_token)
+            }
+            #[cfg(feature = "glua")]
+            Symbol::Exclamation if state.lua_version().has_glua() => {
+                ast::UnOp::Exclamation(unary_operator_token)
             }
             _ => unreachable!(),
         },
